@@ -2,11 +2,11 @@ import streamlit as st
 import requests
 
 """
-# Zoologist front
+# Claimlens
 """
 url = st.secrets['API_URL']
 
-st.title("Claimlens - Predict the refund intent of a customer")
+st.title("Predict the refund intent of a customer")
 
 st.markdown(
     """
@@ -31,6 +31,8 @@ with st.form("Customer message"):
             result = response.json()
             prediction = result.get("refund_intent", result)
             prediction_prob = result.get("probability", result)
+            #prediction = 0
+            #prediction_prob = 0.78
             intent = "Yes" if prediction == 1 else "No"
 
             st.success(f"Predicted Refund Intent: **{intent}**")
