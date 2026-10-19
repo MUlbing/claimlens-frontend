@@ -1,0 +1,12 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+
+# macOS
+.DS_Store
+
+# Secrets and local config
+.env
+.streamlit/secrets.toml

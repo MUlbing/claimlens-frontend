@@ -1,0 +1,19 @@
+[project]
+name = "claimlens-frontend"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Marianela Ulbing", email = "@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "streamlit>=1.66.0",
+]
+
+[project.scripts]
+claimlens-frontend = "claimlens_frontend:main"
+
+[build-system]
+requires = ["uv_build>=0.12.23,<0.13.0"]
+build-backend = "uv_build"
