@@ -1,12 +1,16 @@
-import streamlit as st
-import requests
+import html
 import os
+import time
+from datetime import datetime
+
+import requests
+import streamlit as st
 
 st.set_page_config(
     page_title="ClaimLens - Two-Stage Refund Decision System",
     page_icon="🔍",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # One base URL for the API. Default is Cloud Run.
@@ -45,6 +49,15 @@ if "error_stage" not in st.session_state:
 if "chat" not in st.session_state:
     # customer conversation: list of {"role": "user" | "assistant", "text": str}
     st.session_state.chat = []
+if "request_ms" not in st.session_state:
+    # total API time of the current analysis
+    st.session_state.request_ms = 0
+if "logged" not in st.session_state:
+    # True once the finished analysis is saved in the test history
+    st.session_state.logged = False
+if "history" not in st.session_state:
+    # finished analyses. reset_flow does NOT clear this list.
+    st.session_state.history = []
 
 
 def reset_flow():
@@ -56,6 +69,9 @@ def reset_flow():
     st.session_state.combined_message = ""
     st.session_state.error_stage = None
     st.session_state.chat = []
+    st.session_state.request_ms = 0
+    st.session_state.logged = False
+    st.session_state.opening_text = ""
 
 
 # ----------------------------------------------------
@@ -80,16 +96,54 @@ with st.sidebar:
     st.caption("© 2026 ClaimLens Team. All rights reserved.")
 
 # ----------------------------------------------------
-# 3. Page header
+# 3. Style and header banner
 # ----------------------------------------------------
+# Colours of the page, buttons and tabs come from .streamlit/config.toml.
+# This CSS only styles what the theme cannot: banner, status line and model cards.
+STYLE = """
+<style>
+:root { --brick:#b9402c; --blue:#2f5d8c; --orange:#f26d4f; --green:#9ef0c4; --teal:#176b62; --ink:#222; --card:#fdfcfa; --line:#e4ddd3; }
+[data-testid="stHeader"] { background: transparent; }
+.block-container { padding: 2.5rem 3.5rem 4rem 3.5rem; max-width: none; }
+
+.cl-banner { background:linear-gradient(100deg,#10303f 0%,#14505a 55%,#1a7566 100%); border-radius:26px;
+             padding:2.1rem 3rem 2.3rem 3rem; margin-bottom:1.8rem; }
+.cl-banner-label { color:#a8e6cf; font-size:.78rem; letter-spacing:.28em; text-transform:uppercase; }
+.cl-banner-title { color:var(--green); font-size:3.1rem; font-weight:800; line-height:1.15; margin:1.2rem 0 1.1rem 0; }
+.cl-banner-sub { color:#f1ede8; font-size:1.15rem; }
+
+.cl-eyebrow { color:var(--teal); font-size:.72rem; font-weight:600; letter-spacing:.22em; text-transform:uppercase; }
+
+[data-testid="stAlert"] { background:#fff; border:1px solid var(--line); border-left:5px solid var(--teal); border-radius:12px; }
+[data-testid="stAlertContainer"] { background:transparent; }
+[data-testid="stAlert"] * { color:var(--ink) !important; }
+
+.cl-model { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:1.1rem 1.3rem 1.3rem 1.3rem; margin-bottom:1.2rem; }
+.cl-model-label { color:#9a948c; font-size:.95rem; margin-bottom:.8rem; }
+.cl-model-box { background:#fff; border:1px solid var(--line); border-radius:14px; padding:1.1rem 1.4rem; }
+.cl-model-title { font-size:1.05rem; }
+.cl-pct { font-size:3.1rem; font-weight:800; line-height:1.15; }
+.cl-red { color:var(--brick); }
+.cl-blue { color:var(--blue); }
+.cl-muted { color:#b9b2a8; }
+.cl-bar { height:9px; background:#ece5db; border-radius:99px; margin:1.4rem 0 1.1rem 0; overflow:hidden; }
+.cl-fill { height:100%; border-radius:99px; }
+.cl-red-bg { background:var(--brick); }
+.cl-blue-bg { background:var(--blue); }
+.cl-pred { font-size:1.15rem; }
+</style>
+"""
+st.markdown(STYLE, unsafe_allow_html=True)
+
 st.markdown(
     """
-    <div style="text-align: center; margin-bottom: 2rem;">
-        <h1 style="margin-bottom: 0.25rem;">🔍 ClaimLens</h1>
-        <h3 style="color: #6c757d; font-weight: 400; margin-top: 0;">Intelligen Customer Service</h3>
+    <div class="cl-banner">
+        <div class="cl-banner-label">Customer message analysis</div>
+        <div class="cl-banner-title">🔎 ClaimLens</div>
+        <div class="cl-banner-sub">Understand the request. Review the likely outcome.</div>
     </div>
     """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
 
 # ----------------------------------------------------
@@ -97,8 +151,9 @@ st.markdown(
 # ----------------------------------------------------
 CUSTOMER_ASK_CONTEXT = "Thanks for your message. To help you faster, please tell us more about what happened."
 CUSTOMER_CHOICE = "You can add more details about your issue in the box below, or talk to an agent."
+PRE_APPROVED = "Your request has been pre-approved."
 CUSTOMER_APPROVED = (
-    "Your request has been pre-approved. Please wait 48 hours to receive more details by email. "
+    f"{PRE_APPROVED} Please wait 48 hours to receive more details by email. "
     "An agent might request additional information prior to final approval."
 )
 CUSTOMER_AGENT_TEXT = {
@@ -167,11 +222,20 @@ def go_error(stage):
     add_message("assistant", CUSTOMER_AGENT_TEXT["error"])
 
 
+def timed(call, text):
+    """Run one API call and add its duration to the request time of this analysis."""
+    start = time.perf_counter()
+    try:
+        return call(text)
+    finally:
+        st.session_state.request_ms += int((time.perf_counter() - start) * 1000)
+
+
 def run_model1(text):
     """Run Model 1, save the result, then pick the next step."""
     try:
         with st.spinner("Analysing your message..."):
-            result = call_model1(text)
+            result = timed(call_model1, text)
     except API_ERRORS:
         go_error("Model 1")
         return None
@@ -183,7 +247,7 @@ def run_model2(text):
     """Run Model 2, save the result, then pick the next step."""
     try:
         with st.spinner("Analysing your details..."):
-            result = call_model2(text)
+            result = timed(call_model2, text)
     except API_ERRORS:
         go_error("Model 2")
         return None
@@ -209,7 +273,7 @@ def route_after_first_model1(result):
 
 
 # ----------------------------------------------------
-# 7. Company side helpers
+# 7. Helpers: company side, test history, example messages
 # ----------------------------------------------------
 def company_status(step):
     """Status line for the agent, picked from step and agent_reason."""
@@ -229,111 +293,215 @@ def company_status(step):
     return COMPANY_AGENT_TEXT["error"]
 
 
-def show_model(title, result, placeholder):
-    st.subheader(title)
+def model_card(label, title, result, colour, placeholder):
+    """Card with a big percentage, a progress bar and the prediction. colour is "red" or "blue"."""
     if result:
-        st.metric("Probability", f"{result['probability']:.0%}")
-        st.write(f"Prediction: **{result['intent']}**")
+        percent = round(result["probability"] * 100)
+        big = f'<div class="cl-pct cl-{colour}">{percent}%</div>'
+        prediction = f"Prediction: <b>{html.escape(str(result['intent']))}</b>"
     else:
-        st.caption(placeholder)
-
-
-# ----------------------------------------------------
-# 8. Layout: customer on the left, company on the right
-# ----------------------------------------------------
-step = st.session_state.step
-left, right = st.columns(2, gap="large")
-
-with left:
-    st.header("Customer view")
-
-    # The whole conversation stays on screen. Only the input below changes with the step.
-    for message in st.session_state.chat:
-        with st.chat_message(message["role"]):
-            st.write(message["text"])
-
-    if step == "input":
-        with st.form("input_form"):
-            opening_message = st.text_area(
-                "Opening customer message",
-                placeholder="e.g. My package arrived wet and the leather jacket is destroyed. Can I get a refund?",
-                height=120,
-            )
-            submitted = st.form_submit_button("Analyse", use_container_width=True)
-
-        if submitted:
-            if not opening_message.strip():
-                st.warning("Please enter a message first.")
-            else:
-                st.session_state.first_message = opening_message.strip()
-                st.session_state.combined_message = st.session_state.first_message
-                add_message("user", st.session_state.first_message)
-                result = run_model1(st.session_state.first_message)
-                if result:
-                    route_after_first_model1(result)
-                st.rerun()
-
-    elif step == "context":
-        with st.form("context_form"):
-            details = st.text_area(
-                "Further customer messages",
-                placeholder="e.g. Order #12345. The zipper is completely broken and torn off.",
-                height=100,
-            )
-            sent = st.form_submit_button("Send", use_container_width=True)
-
-        if sent:
-            if not details.strip():
-                st.warning("Please enter some details.")
-            else:
-                combined = f"{st.session_state.first_message} {details.strip()}"
-                st.session_state.combined_message = combined
-                add_message("user", details.strip())
-                run_model2(combined)
-                st.rerun()
-
-    elif step == "choice":
-        with st.form("choice_form"):
-            details = st.text_area(
-                "Add more details",
-                placeholder="e.g. The item arrived broken and I would like my money back.",
-                height=100,
-            )
-            sent = st.form_submit_button("Send", use_container_width=True)
-        talk_to_agent = st.button("Talk to an agent", use_container_width=True)
-
-        if talk_to_agent:
-            add_message("user", "Talk to an agent")
-            go_agent("customer_request")
-            st.rerun()
-
-        if sent:
-            if not details.strip():
-                st.warning("Please enter some details, or talk to an agent.")
-            else:
-                # One retry only: this step is left after this click, whatever the answer is.
-                combined = f"{st.session_state.first_message} {details.strip()}"
-                st.session_state.combined_message = combined
-                add_message("user", details.strip())
-                result = run_model1(combined)
-                if result and result["intent"] == "Yes":
-                    run_model2(combined)
-                elif result:
-                    go_agent("retry_no")
-                st.rerun()
-
-with right:
-    st.header("Company view")
-    st.info(company_status(step))
-    if step == "error":
-        st.caption(f"Failed at: {st.session_state.error_stage}")
-
-    show_model("Model 1: Refund intent", st.session_state.stage1_result, "Not run")
-    show_model(
-        "Model 2: Approved action",
-        st.session_state.stage2_result,
-        "Waiting for more context" if step == "context" else "Not run",
+        percent = 0
+        big = '<div class="cl-pct cl-muted">&ndash;</div>'
+        prediction = placeholder
+    st.markdown(
+        f'<div class="cl-model">'
+        f'<div class="cl-model-label">{label}</div>'
+        f'<div class="cl-model-box"><div class="cl-model-title">{title}</div>{big}</div>'
+        f'<div class="cl-bar"><div class="cl-fill cl-{colour}-bg" style="width:{percent}%"></div></div>'
+        f'<div class="cl-pred">{prediction}</div>'
+        f'</div>',
+        unsafe_allow_html=True,
     )
 
-    with st.expander("Messages used for these results"):
-        st.write(st.session_state.combined_message or "No message yet.")
+
+HISTORY_OUTCOME = {
+    "approved": "Recommended for approval",
+    "low_intent": "Agent: low refund intent",
+    "customer_request": "Agent: customer request",
+    "retry_no": "Agent: still no refund intent",
+    "model2_no": "Agent: human review recommended",
+}
+
+
+def log_history_once(step):
+    """Save a finished analysis in the test history. It runs once per analysis."""
+    if step not in ("approved", "agent", "error") or st.session_state.logged:
+        return
+
+    if step == "error":
+        outcome = f"Agent: technical error ({st.session_state.error_stage})"
+    elif step == "approved":
+        outcome = HISTORY_OUTCOME["approved"]
+    else:
+        outcome = HISTORY_OUTCOME[st.session_state.agent_reason]
+
+    def show(result):
+        return f"{result['intent']} ({result['probability']:.0%})" if result else "Not run"
+
+    st.session_state.history.append({
+        "Time": datetime.now().strftime("%H:%M:%S"),
+        "Opening message": st.session_state.first_message,
+        "Model 1": show(st.session_state.stage1_result),
+        "Model 2": show(st.session_state.stage2_result),
+        "Outcome": outcome,
+        "Request time (ms)": st.session_state.request_ms,
+    })
+    st.session_state.logged = True
+
+
+def highlight(text):
+    """Show the pre-approval sentence in green. Uses Streamlit colour syntax, no HTML."""
+    return text.replace(PRE_APPROVED, f":green-background[**{PRE_APPROVED}**]")
+
+
+MODEL2_NOTE = "Model 2 covers refunds, returns, credits, fee waivers and cancellations. The agent makes the decision."
+SCORES_NOTE = "Prediction scores are not accuracy results or a guarantee of approval."
+FOOTER_TEXT = "ClaimLens team project | Le Wagon Data Science bootcamp"
+
+
+EXAMPLES = {
+    "📦 Damaged item": "My package arrived wet and the leather jacket is destroyed. Can I get a refund?",
+    "🚚 Delivery": "My order has not arrived and the tracking has not moved for a week. I want my money back.",
+    "💳 Billing": "I was charged twice. Please refund the extra payment.",
+}
+
+
+def use_example(text):
+    st.session_state.opening_text = text
+
+
+# ----------------------------------------------------
+# 8. Layout: two tabs. First tab has customer on the left and company on the right
+# ----------------------------------------------------
+step = st.session_state.step
+log_history_once(step)
+
+tab_analyse, tab_history = st.tabs(["✦ Analyse a message", "🕘 Test history"])
+
+with tab_analyse:
+    left, right = st.columns([5, 6], gap="large")
+
+    with left:
+        with st.container(border=True):
+            st.markdown('<div class="cl-eyebrow">Customer view</div>', unsafe_allow_html=True)
+            st.subheader("💬 Customer messages")
+
+            # The whole conversation stays on screen. Only the input below changes with the step.
+            for message in st.session_state.chat:
+                with st.chat_message(message["role"]):
+                    st.markdown(highlight(message["text"]))
+
+            if step == "input":
+                example_columns = st.columns(3)
+                for column, (label, text) in zip(example_columns, EXAMPLES.items()):
+                    column.button(label, on_click=use_example, args=(text,), use_container_width=True)
+
+                with st.form("input_form", border=False):
+                    opening_message = st.text_area(
+                        "Opening customer message",
+                        key="opening_text",
+                        placeholder="e.g. My package arrived wet and the leather jacket is destroyed. Can I get a refund?",
+                        height=120,
+                    )
+                    analyse_column, clear_column = st.columns([3, 2])
+                    with analyse_column:
+                        submitted = st.form_submit_button("✦ Analyse", type="primary", use_container_width=True)
+                    with clear_column:
+                        st.form_submit_button("↺ Clear", on_click=reset_flow, use_container_width=True)
+
+                if submitted:
+                    if not opening_message.strip():
+                        st.warning("Please enter a message first.")
+                    else:
+                        st.session_state.first_message = opening_message.strip()
+                        st.session_state.combined_message = st.session_state.first_message
+                        add_message("user", st.session_state.first_message)
+                        result = run_model1(st.session_state.first_message)
+                        if result:
+                            route_after_first_model1(result)
+                        st.rerun()
+
+            elif step == "context":
+                with st.form("context_form", border=False):
+                    details = st.text_area(
+                        "Further customer messages",
+                        help="Order number, condition of the item, or anything that explains the problem.",
+                        placeholder="e.g. Order #12345. The zipper is completely broken and torn off.",
+                        height=100,
+                    )
+                    sent = st.form_submit_button("Send", type="primary", use_container_width=True)
+
+                if sent:
+                    if not details.strip():
+                        st.warning("Please enter some details.")
+                    else:
+                        combined = f"{st.session_state.first_message} {details.strip()}"
+                        st.session_state.combined_message = combined
+                        add_message("user", details.strip())
+                        run_model2(combined)
+                        st.rerun()
+
+            elif step == "choice":
+                with st.form("choice_form", border=False):
+                    details = st.text_area(
+                        "Add more details",
+                        help="Order number, condition of the item, or anything that explains the problem.",
+                        placeholder="e.g. The item arrived broken and I would like my money back.",
+                        height=100,
+                    )
+                    sent = st.form_submit_button("Send", type="primary", use_container_width=True)
+                talk_to_agent = st.button("Talk to an agent", use_container_width=True)
+
+                if talk_to_agent:
+                    add_message("user", "Talk to an agent")
+                    go_agent("customer_request")
+                    st.rerun()
+
+                if sent:
+                    if not details.strip():
+                        st.warning("Please enter some details, or talk to an agent.")
+                    else:
+                        # One retry only: this step is left after this click, whatever the answer is.
+                        combined = f"{st.session_state.first_message} {details.strip()}"
+                        st.session_state.combined_message = combined
+                        add_message("user", details.strip())
+                        result = run_model1(combined)
+                        if result and result["intent"] == "Yes":
+                            run_model2(combined)
+                        elif result:
+                            go_agent("retry_no")
+                        st.rerun()
+
+    with right:
+        st.markdown('<div class="cl-eyebrow">Company view</div>', unsafe_allow_html=True)
+        st.subheader("📊 Analysis results")
+        st.info(company_status(step))
+        if step == "error":
+            st.caption(f"Failed at: {st.session_state.error_stage}")
+
+        with st.expander("Messages used for these results"):
+            st.write(st.session_state.combined_message or "No message yet.")
+
+        model_card("Model 1", "Refund intent", st.session_state.stage1_result, "red", "Not run")
+        model_card(
+            "Model 2",
+            "Approved action",
+            st.session_state.stage2_result,
+            "blue",
+            "Waiting for more context" if step == "context" else "Not run",
+        )
+
+        if st.session_state.request_ms:
+            st.caption(f"Total request time: {st.session_state.request_ms} ms. Scores are rounded by the API.")
+        st.caption(MODEL2_NOTE)
+        st.caption(SCORES_NOTE)
+
+with tab_history:
+    st.subheader("🕘 Test history")
+    if st.session_state.history:
+        st.dataframe(list(reversed(st.session_state.history)), width="stretch", hide_index=True)
+    else:
+        st.caption("No analyses yet. Run a message in the first tab.")
+
+st.markdown("---")
+st.caption(FOOTER_TEXT)
