@@ -149,8 +149,8 @@ if st.session_state.stage1_result and st.session_state.stage1_result["intent"] =
 
                 try:
                     with st.spinner("Processing second model inference..."):
-                        params = payload['combined_message']
-                        response = requests.get(URL_STAGE2, params=params, timeout=10)
+                        params = {"customer_message": combined_text}
+                        response = requests.get(URL_STAGE2, params=params, timeout=30)
                         response.raise_for_status()
                         result = response.json()
 
