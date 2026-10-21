@@ -6,13 +6,33 @@ import requests
 """
 url = st.secrets['API_URL']
 
-st.title("Predict the refund intent of a customer")
+#st.title("Predict the refund intent of a customer")
 
-st.markdown(
-    """
-Please enter the customer message and click the **Predict** button to see the predicted refund intent.
-"""
+#st.markdown(
+#   """
+#Please enter the customer message and click the **Predict** button to see the predicted refund intent.
+#"""
+#)
+st.set_page_config(
+    page_title="ClaimLens - Intelligent recognition of customer refund intent",
+    page_icon="🔍",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+with st.sidebar:
+    st.image("https://img.icons8.com/fluency/96/search-property.png", width=64)
+    st.title("ClaimLens Console")
+    st.markdown("Refund intent recognition based on NLP pipeline processing")
+
+    st.markdown("---")
+    st.subheader("Model Selection")
+    st.info("Current Model: **LinearSVC / ComplementNB + TF-IDF (1-2 gram)**")
+
+    threshold = st.slider("Intent Decision Threshold", min_value=0.1, max_value=0.9, value=0.5, step=0.05)
+
+    st.markdown("---")
+    st.caption("© 2026 ClaimLens Team. All rights reserved.")
 
 with st.form("Customer message"):
 
@@ -31,9 +51,8 @@ with st.form("Customer message"):
             result = response.json()
             prediction = result.get("refund_intent", result)
             prediction_prob = result.get("probability", result)
-            #prediction = 0
-            #prediction_prob = 0.78
-            intent = "Yes" if prediction == 1 else "No"
+            intent = prediction['Refund Intent']
+            prediction_prob = prediction_prob['Refund Intent Probability']
 
             st.success(f"Predicted Refund Intent: **{intent}**")
             st.success(f"Predicted Refund Probability: **{prediction_prob}**")
