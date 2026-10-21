@@ -59,7 +59,7 @@ st.markdown(
     """
     <div style="text-align: center; margin-bottom: 2rem;">
         <h1 style="margin-bottom: 0.25rem;">🔍 ClaimLens</h1>
-        <h3 style="color: #6c757d; font-weight: 400; margin-top: 0;">Customer Service Intelligence</h3>
+        <h3 style="color: #6c757d; font-weight: 400; margin-top: 0;">Intelligen Customer Service</h3>
     </div>
     """,
     unsafe_allow_html=True
@@ -114,9 +114,9 @@ if st.session_state.stage1_result:
     col1, col2 = st.columns(2)
     with col1:
         if res1["intent"] == "Yes":
-            st.error(f"Predicted Claim intent: **{res1['intent']}**")
-        else:
             st.success(f"Predicted Claim intent: **{res1['intent']}**")
+        else:
+            st.info(f"Predicted Claim intent: **{res1['intent']}**")
     with col2:
         st.metric(label="Claim Intent Probability", value=f"{res1['probability']}")
 
