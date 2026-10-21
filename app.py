@@ -8,13 +8,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# API for intent endpoint and for the second stage endpoint (currently using the same endpoint for both stages)
+
 URL_STAGE1 = "https://claimlens-api-392994371879.europe-west3.run.app/predict"
 URL_STAGE2 = "https://claimlens-api-392994371879.europe-west3.run.app/more_context"
 
-# ----------------------------------------------------
-# 1. Initialize Session State
-# ----------------------------------------------------
+
 if "first_message" not in st.session_state:
     st.session_state.first_message = ""
 if "stage1_result" not in st.session_state:
@@ -29,9 +27,6 @@ def reset_flow():
     st.session_state.stage2_result = None
 
 
-# ----------------------------------------------------
-# 2. Sidebar Configuration
-# ----------------------------------------------------
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/search-property.png", width=64)
     st.title("ClaimLens Console")
@@ -39,9 +34,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("Model Pipeline")
-    st.info("**Stage 1**: Intent Detection\n\n**Stage 2**: Case Resolution & Reasoning")
-
-    #threshold = st.slider("Intent Decision Threshold", min_value=0.1, max_value=0.9, value=0.5, step=0.05)
+    st.info("**Stage 1**: Claim Intent Detection \n\n**Stage 2**: Refund Decision with Additional Context")
 
     if st.button("🔄 Reset Conversation", use_container_width=True):
         reset_flow()
@@ -50,16 +43,11 @@ with st.sidebar:
     st.markdown("---")
     st.caption("© 2026 ClaimLens Team. All rights reserved.")
 
-# ----------------------------------------------------
-# 3. Stage 1: Initial Customer Message Input
-# ----------------------------------------------------
-# st.title("🔍 ClaimLens - Customer Service Intelligence")
-
 st.markdown(
     """
     <div style="text-align: center; margin-bottom: 2rem;">
         <h1 style="margin-bottom: 0.25rem;">🔍 ClaimLens</h1>
-        <h3 style="color: #6c757d; font-weight: 400; margin-top: 0;">Intelligen Customer Service</h3>
+        <h3 style="color: #6c757d; font-weight: 400; margin-top: 0;">Intelligent Customer Service</h3>
     </div>
     """,
     unsafe_allow_html=True
@@ -93,11 +81,6 @@ with st.form("Stage 1 - Initial Message"):
                 intent = result.get("Refund Intent", "Yes" if result.get("refund_intent") == 1 else "No")
                 prob = float(result.get("Refund Intent Probability", result.get("probability", 0.0)))
 
-                #prediction = result.get("refund_intent", result)
-                #prediction_prob = result.get("probability", result)
-                #intent = prediction.get("Refund Intent", result.get("Refund Intent", "No"))
-               # prob = prediction_prob.get("Refund Intent Probability", result.get("Refund Intent Probability", 0.0))
-
                 st.session_state.stage1_result = {
                     "intent": intent,
                     "probability": prob
@@ -106,27 +89,28 @@ with st.form("Stage 1 - Initial Message"):
             except requests.exceptions.RequestException as e:
                 st.error(f"Stage 1 API Request Failed: {e}")
 
-# Display Stage 1 Result
+
 if st.session_state.stage1_result:
     res1 = st.session_state.stage1_result
     st.markdown("---")
+    st.subheader("📊 Stage 1 Intent Diagnosis")
 
     col1, col2 = st.columns(2)
     with col1:
         if res1["intent"] == "Yes":
-            st.success(f"Predicted Claim intent: **{res1['intent']}**")
+            st.success(f"Predicted Claim Intent: **{res1['intent']}**")
         else:
-            st.info(f"Predicted Claim intent: **{res1['intent']}**")
-    with col2:
-        st.metric(label="Claim Intent Probability", value=f"{res1['probability']}")
+            st.info(f"Predicted Claim Intent: **{res1['intent']}**")
 
-# ----------------------------------------------------
-# 4. Stage 2: Follow-up Input Form (Triggered when Intent is 'Yes')
-# ----------------------------------------------------
+    with col2:
+        st.metric(label="Claim Intent Probability", value=f"{res1['probability']:.1%}")
+        st.progress(min(max(res1["probability"], 0.0), 1.0))
+
+
 if st.session_state.stage1_result and st.session_state.stage1_result["intent"] == "Yes":
     st.markdown("---")
     st.subheader("📋 Step 2: Additional Case Details")
-    st.info("Refund intent confirmed. Please provide further details (e.g. order number, item condition, specific issue) to proceed with the resolution.")
+    st.info("💡 Refund intent confirmed. Please provide further details (e.g. order number, item condition, specific issue) to proceed with the resolution.")
 
     with st.form("Stage 2 - Follow-up Details"):
         additional_info = st.text_area(
@@ -134,43 +118,51 @@ if st.session_state.stage1_result and st.session_state.stage1_result["intent"] =
             placeholder="e.g. Order #12345. The zipper is completely broken and torn off.",
             height=100
         )
-        submitted_stage2 = st.form_submit_button("Submit to Stage 2 Model", use_container_width=True)
+        submitted_stage2 = st.form_submit_button("Predict the decision of refund", use_container_width=True)
 
         if submitted_stage2:
             if not additional_info.strip():
                 st.warning("Please enter additional details.")
             else:
                 combined_text = f"{st.session_state.first_message} {additional_info}"
+
                 payload = {
-                    "initial_message": st.session_state.first_message,
-                    "additional_message": additional_info,
-                    "combined_message": combined_text
+                    "customer_message": combined_text
                 }
 
                 try:
                     with st.spinner("Processing second model inference..."):
-                        params = payload['combined_message']
-                        response = requests.get(URL_STAGE2, params=params, timeout=10)
+                        response = requests.get(URL_STAGE2, params=payload, timeout=10)
                         response.raise_for_status()
                         result = response.json()
 
-                        intent = result.get("Money Back", "Yes" if result.get("refund_intent") == 1 else "No")
+                        intent = result.get("Money Back", "Yes" if result.get("money_back") == 1 else "No")
                         prob = float(result.get("Chance of money loss", result.get("probability", 0.0)))
 
                         st.session_state.stage2_result = {
-                                            "Money back": intent,
-                                            "Chance of money loss": prob
-                                        }
+                            "money_back": intent,
+                            "chance_of_loss": prob
+                        }
 
                 except requests.exceptions.RequestException as e:
                     st.error(f"Stage 2 API Request Failed: {e}")
 
-# ----------------------------------------------------
-# 5. Stage 2 Result Display
-# ----------------------------------------------------
+
 if st.session_state.stage2_result:
     st.markdown("---")
     st.subheader("🏁 Stage 2 Final Resolution")
     res2 = st.session_state.stage2_result
 
-    st.json(res2)
+    col_res1, col_res2 = st.columns(2)
+    with col_res1:
+        if res2["money_back"] == "Yes":
+            st.success(f"Money Back Approved: **{res2['money_back']}**")
+        else:
+            st.info(f"Money Back Approved: **{res2['money_back']}**")
+
+    with col_res2:
+        st.metric(label="Chance of Money Loss", value=f"{res2['chance_of_loss']:.1%}")
+        st.progress(min(max(res2["chance_of_loss"], 0.0), 1.0))
+
+    #with st.expander("🔍 View Raw API Response"):
+    #    st.json(res2)
