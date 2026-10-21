@@ -41,7 +41,7 @@ with st.sidebar:
     st.subheader("Model Pipeline")
     st.info("**Stage 1**: Intent Detection\n\n**Stage 2**: Case Resolution & Reasoning")
 
-    threshold = st.slider("Intent Decision Threshold", min_value=0.1, max_value=0.9, value=0.5, step=0.05)
+    #threshold = st.slider("Intent Decision Threshold", min_value=0.1, max_value=0.9, value=0.5, step=0.05)
 
     if st.button("🔄 Reset Conversation", use_container_width=True):
         reset_flow()
@@ -53,7 +53,17 @@ with st.sidebar:
 # ----------------------------------------------------
 # 3. Stage 1: Initial Customer Message Input
 # ----------------------------------------------------
-st.title("🔍 ClaimLens - Customer Service Intelligence")
+# st.title("🔍 ClaimLens - Customer Service Intelligence")
+
+st.markdown(
+    """
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <h1 style="margin-bottom: 0.25rem;">🔍 ClaimLens</h1>
+        <h3 style="color: #6c757d; font-weight: 400; margin-top: 0;">Customer Service Intelligence</h3>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 with st.form("Stage 1 - Initial Message"):
     customer_message = st.text_area(
@@ -73,7 +83,6 @@ with st.form("Stage 1 - Initial Message"):
 
             params = {
                 "customer_message": customer_message,
-                "threshold": threshold
             }
 
             try:
@@ -105,11 +114,11 @@ if st.session_state.stage1_result:
     col1, col2 = st.columns(2)
     with col1:
         if res1["intent"] == "Yes":
-            st.error(f"Predicted Refund Intent: **{res1['intent']}**")
+            st.error(f"Predicted Claim intent: **{res1['intent']}**")
         else:
-            st.success(f"Predicted Refund Intent: **{res1['intent']}**")
+            st.success(f"Predicted Claim intent: **{res1['intent']}**")
     with col2:
-        st.metric(label="Refund Probability", value=f"{res1['probability']}")
+        st.metric(label="Claim Intent Probability", value=f"{res1['probability']}")
 
 # ----------------------------------------------------
 # 4. Stage 2: Follow-up Input Form (Triggered when Intent is 'Yes')
