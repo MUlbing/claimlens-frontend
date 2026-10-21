@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 import requests
 
@@ -8,9 +9,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# API for intent endpoint and for the second stage endpoint (currently using the same endpoint for both stages)
-URL_STAGE1 = "https://claimlens-api-392994371879.europe-west3.run.app/predict"
-URL_STAGE2 = "https://claimlens-api-392994371879.europe-west3.run.app/more_context"
+# One base URL for the API. Default is Cloud Run.
+# To test against a local API: CLAIMLENS_API_URL=http://127.0.0.1:8000 uv run streamlit run app.py
+API_URL = os.getenv(
+    "CLAIMLENS_API_URL",
+    "https://claimlens-api-392994371879.europe-west3.run.app",
+)
+URL_STAGE1 = f"{API_URL}/predict"
+URL_STAGE2 = f"{API_URL}/more_context"
+
+# Model 1 probability below this goes straight to an agent.
+# The Yes/No label always comes from the API. This number only picks case 2a or 2b.
+LOW_INTENT_CUTOFF = 0.25
+
+# One sentence for every live handoff to an agent
+AGENT_LINE = "An agent has been assigned to you and will be with you shortly."
 
 # ----------------------------------------------------
 # 1. Initialize Session State
@@ -21,12 +34,20 @@ if "stage1_result" not in st.session_state:
     st.session_state.stage1_result = None
 if "stage2_result" not in st.session_state:
     st.session_state.stage2_result = None
+if "step" not in st.session_state:
+    # input | context | choice | approved | agent | error
+    st.session_state.step = "input"
+if "agent_reason" not in st.session_state:
+    # low_intent | customer_request | retry_no | model2_no
+    st.session_state.agent_reason = None
 
 
 def reset_flow():
     st.session_state.first_message = ""
     st.session_state.stage1_result = None
     st.session_state.stage2_result = None
+    st.session_state.step = "input"
+    st.session_state.agent_reason = None
 
 
 # ----------------------------------------------------
@@ -86,7 +107,7 @@ with st.form("Stage 1 - Initial Message"):
             }
 
             try:
-                response = requests.get(URL_STAGE1, params=params, timeout=10)
+                response = requests.get(URL_STAGE1, params=params, timeout=30)
                 response.raise_for_status()
                 result = response.json()
 
