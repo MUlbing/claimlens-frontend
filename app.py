@@ -30,9 +30,7 @@ AUTO_APPROVE_CUTOFF = 0.95
 # One sentence for every live handoff to an agent
 AGENT_LINE = "An agent has been assigned to you and will be with you shortly."
 
-# ----------------------------------------------------
-# 1. Initialize Session State
-# ----------------------------------------------------
+
 if "first_message" not in st.session_state:
     st.session_state.first_message = ""
 if "stage1_result" not in st.session_state:
@@ -78,9 +76,6 @@ def reset_flow():
     st.session_state.opening_text = ""
 
 
-# ----------------------------------------------------
-# 2. Sidebar Configuration
-# ----------------------------------------------------
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/search-property.png", width=64)
     st.title("ClaimLens Console")
@@ -88,9 +83,7 @@ with st.sidebar:
 
     st.markdown("---")
     st.subheader("Model Pipeline")
-    st.info("**Stage 1**: Intent Detection\n\n**Stage 2**: Case Resolution & Reasoning")
-
-    #threshold = st.slider("Intent Decision Threshold", min_value=0.1, max_value=0.9, value=0.5, step=0.05)
+    st.info("**Stage 1**: Claim Intent Detection \n\n**Stage 2**: Refund Decision with Additional Context")
 
     if st.button("🔄 Reset Conversation", use_container_width=True):
         reset_flow()
