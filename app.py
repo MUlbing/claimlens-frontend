@@ -8,12 +8,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# 两个模型的 API 地址
+# API for intent endpoint and for the second stage endpoint (currently using the same endpoint for both stages)
 URL_STAGE1 = "https://claimlens-api-392994371879.europe-west3.run.app/predict"
 URL_STAGE2 = "https://claimlens-api-392994371879.europe-west3.run.app/predict"
 
 # ----------------------------------------------------
-# 1. 初始化 Session State (保留多轮交互数据)
+# 1. Initialize Session State
 # ----------------------------------------------------
 if "first_message" not in st.session_state:
     st.session_state.first_message = ""
@@ -30,7 +30,7 @@ def reset_flow():
 
 
 # ----------------------------------------------------
-# 2. 侧边栏配置
+# 2. Sidebar Configuration
 # ----------------------------------------------------
 with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/search-property.png", width=64)
@@ -51,7 +51,7 @@ with st.sidebar:
     st.caption("© 2026 ClaimLens Team. All rights reserved.")
 
 # ----------------------------------------------------
-# 3. 阶段一：首轮消息输入与预测
+# 3. Stage 1: Initial Customer Message Input
 # ----------------------------------------------------
 st.title("🔍 ClaimLens - Customer Service Intelligence")
 
@@ -97,7 +97,7 @@ with st.form("Stage 1 - Initial Message"):
             except requests.exceptions.RequestException as e:
                 st.error(f"Stage 1 API Request Failed: {e}")
 
-# 展示阶段一判定结果
+# Display Stage 1 Result
 if st.session_state.stage1_result:
     res1 = st.session_state.stage1_result
     st.markdown("---")
@@ -112,7 +112,7 @@ if st.session_state.stage1_result:
         st.metric(label="Refund Probability", value=f"{res1['probability']}")
 
 # ----------------------------------------------------
-# 4. 阶段二：当 Intent 为 'Yes' 时触发后续输入表单
+# 4. Stage 2: Follow-up Input Form (Triggered when Intent is 'Yes')
 # ----------------------------------------------------
 if st.session_state.stage1_result and st.session_state.stage1_result["intent"] == "Yes":
     st.markdown("---")
@@ -131,7 +131,6 @@ if st.session_state.stage1_result and st.session_state.stage1_result["intent"] =
             if not additional_info.strip():
                 st.warning("Please enter additional details.")
             else:
-                # 拼接两轮文本并构建请求体
                 combined_text = f"{st.session_state.first_message} {additional_info}"
                 payload = {
                     "initial_message": st.session_state.first_message,
@@ -161,12 +160,11 @@ if st.session_state.stage1_result and st.session_state.stage1_result["intent"] =
                     st.error(f"Stage 2 API Request Failed: {e}")
 
 # ----------------------------------------------------
-# 5. 阶段二结果展示
+# 5. Stage 2 Result Display
 # ----------------------------------------------------
 if st.session_state.stage2_result:
     st.markdown("---")
     st.subheader("🏁 Stage 2 Final Resolution")
     res2 = st.session_state.stage2_result
 
-    # 适配输出字段（若后端返回具体决策、分类或回复，可直接展示）
     st.json(res2)
