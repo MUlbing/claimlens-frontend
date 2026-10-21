@@ -10,7 +10,7 @@ st.set_page_config(
 
 # API for intent endpoint and for the second stage endpoint (currently using the same endpoint for both stages)
 URL_STAGE1 = "https://claimlens-api-392994371879.europe-west3.run.app/predict"
-URL_STAGE2 = "https://claimlens-api-392994371879.europe-west3.run.app/predict"
+URL_STAGE2 = "https://claimlens-api-392994371879.europe-west3.run.app/more_context"
 
 # ----------------------------------------------------
 # 1. Initialize Session State
@@ -69,7 +69,7 @@ with st.form("Stage 1 - Initial Message"):
             st.warning("Please enter a message first.")
         else:
             st.session_state.first_message = customer_message
-            st.session_state.stage2_result = None  # 重置第二阶段结果
+            st.session_state.stage2_result = None
 
             params = {
                 "customer_message": customer_message,
@@ -140,20 +140,17 @@ if st.session_state.stage1_result and st.session_state.stage1_result["intent"] =
 
                 try:
                     with st.spinner("Processing second model inference..."):
-                        #response_s2 = requests.post(URL_STAGE2, json=payload, timeout=15)
-                        #response_s2.raise_for_status()
-                        #st.session_state.stage2_result = response_s2.json()
                         params = payload['combined_message']
-                        response = requests.get(URL_STAGE1, params=params, timeout=10)
+                        response = requests.get(URL_STAGE2, params=params, timeout=10)
                         response.raise_for_status()
                         result = response.json()
 
-                        intent = result.get("Refund Intent", "Yes" if result.get("refund_intent") == 1 else "No")
-                        prob = float(result.get("Refund Intent Probability", result.get("probability", 0.0)))
+                        intent = result.get("Money Back", "Yes" if result.get("refund_intent") == 1 else "No")
+                        prob = float(result.get("Chance of money loss", result.get("probability", 0.0)))
 
                         st.session_state.stage2_result = {
                                             "Money back": intent,
-                                            "Probality of lossing money": prob
+                                            "Chance of money loss": prob
                                         }
 
                 except requests.exceptions.RequestException as e:
