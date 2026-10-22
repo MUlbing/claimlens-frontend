@@ -101,33 +101,35 @@ STYLE = """
 <style>
 :root { --brick:#b9402c; --blue:#2f5d8c; --orange:#f26d4f; --green:#9ef0c4; --ok:#2a9a5b; --teal:#176b62; --ink:#222; --card:#fdfcfa; --line:#e4ddd3; }
 [data-testid="stHeader"] { background: transparent; }
-.block-container { padding: 2.5rem 3.5rem 4rem 3.5rem; max-width: none; }
+.block-container { padding: 1.4rem 3rem 1rem 3rem; max-width: none; }
+[data-testid="stChatMessage"] { padding: .45rem .75rem; }
+[data-testid="stVerticalBlock"] { gap: .75rem; }
 
 .cl-banner { background:linear-gradient(100deg,#10303f 0%,#14505a 55%,#1a7566 100%); border-radius:26px;
-             padding:2.1rem 3rem 2.3rem 3rem; margin-bottom:1.8rem; }
-.cl-banner-label { color:#a8e6cf; font-size:.85rem; letter-spacing:.28em; text-transform:uppercase; margin-bottom:1.2rem; }
-.cl-banner-title { color:var(--green); font-size:4.8rem; font-weight:800; line-height:1.1; margin:0 0 .6rem 0; }
+             padding:1.2rem 2.4rem 1.3rem 2.4rem; margin-bottom:1rem; }
+.cl-banner-label { color:#a8e6cf; font-size:.85rem; letter-spacing:.28em; text-transform:uppercase; margin-bottom:.7rem; }
+.cl-banner-title { color:var(--green); font-size:3.9rem; font-weight:800; line-height:1.1; margin:0 0 .3rem 0; }
 .cl-banner-sub { color:#f1ede8; font-size:1.15rem; }
 
-.cl-eyebrow { color:var(--teal); font-size:1.2rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; margin-bottom:.5rem; }
+.cl-eyebrow { color:var(--teal); font-size:1rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; margin-bottom:.5rem; }
 
 [data-testid="stAlert"] { background:#fff; border:1px solid var(--line); border-left:5px solid var(--teal); border-radius:12px; }
 [data-testid="stAlertContainer"] { background:transparent; }
 [data-testid="stAlert"] * { color:var(--ink) !important; }
 
-.cl-model { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.8rem 1rem .9rem 1rem; margin-bottom:.8rem; }
+.cl-model { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:.6rem .9rem .7rem .9rem; margin-bottom:.6rem; }
 .cl-model-label { color:#9a948c; font-size:.85rem; margin-bottom:.45rem; }
 .cl-model-box { background:#fff; border:1px solid var(--line); border-radius:10px; padding:.7rem 1rem; }
 .cl-model-title { font-size:1rem; }
 .cl-verdict { display:flex; align-items:baseline; gap:.9rem; flex-wrap:wrap; }
-.cl-num { font-size:1.6rem; font-weight:800; line-height:1.2; margin-top:.35rem; }
+.cl-num { font-size:1.35rem; font-weight:800; line-height:1.2; margin-top:.35rem; }
 .cl-conf { color:#9a948c; font-size:.85rem; }
-.cl-pct { font-size:2.3rem; font-weight:800; line-height:1.15; }
+.cl-pct { font-size:1.9rem; font-weight:800; line-height:1.15; }
 .cl-red { color:var(--brick); }
 .cl-green { color:var(--ok); }
 .cl-blue { color:var(--blue); }
 .cl-muted { color:#b9b2a8; }
-.cl-bar { height:9px; background:#ece5db; border-radius:99px; margin:.8rem 0 .2rem 0; overflow:hidden; }
+.cl-bar { height:9px; background:#ece5db; border-radius:99px; margin:.6rem 0 .2rem 0; overflow:hidden; }
 .cl-fill { height:100%; border-radius:99px; }
 .cl-red-bg { background:var(--brick); }
 .cl-green-bg { background:var(--ok); }
@@ -413,15 +415,65 @@ def agent_decides(new_step, customer_text):
 FOOTER_TEXT = "ClaimLens team project | Le Wagon Data Science bootcamp"
 
 
-EXAMPLES = {
-    "📦 Damaged item": "My package arrived wet and the leather jacket is destroyed. Can I get a refund?",
-    "🚚 Delivery": "My order has not arrived and the tracking has not moved for a week. I want my money back.",
-    "💳 Billing": "I was charged twice. Please refund the extra payment.",
-}
+# Demo prompts. Each one has a first message and a second message for the "Continue demo" button.
+# The numbers are the scores seen in testing. The app always shows what the API returns.
+# Delivery has no second message, so it has no Continue demo button.
+#   Billing 1:      M1 71%, then M2 96%  -> approved automatically
+#   Order issue:    M1 93%, then M2 57%  -> agent
+#   Damaged item:   M1 44%, then M1 51% and M2 47% -> agent
+#   Billing 2:      M1 44%, then M1 90% and M2 84% -> pre-approved
+DEMO_PROMPTS = [
+    ("💳 Billing 1",
+     "Hey, I have an issue",
+     "My bank statement says that I got charged twice for my order."),
+    ("🛒 Order issue",
+     "Hello! My item is wrong, I ordered a blue coat.",
+     "I ordered a blue coat and received a green one."),
+    ("📦 Damaged item",
+     "Good evening, my item was damage upon arrival.",
+     "I received my order last night and the item was completely destroyed when I opened the box. "
+     "I want to exchange it."),
+    ("💳 Billing 2",
+     "I need to speak with customer service asap.",
+     "You charged me 4 times the amount that i was supposed to pay"),
+]
+EXAMPLES = {label: first for label, first, _ in DEMO_PROMPTS}
+EXAMPLES["🚚 Delivery"] = "My order has not arrived and the tracking has not moved for a week. I want my money back."
+DEMO_SECOND = {first: second for _, first, second in DEMO_PROMPTS}
 
 
 def use_example(text):
     st.session_state.opening_text = text
+
+
+def fill_demo():
+    """Continue demo: put the second message of the chosen prompt in the text box. Nothing runs until Send."""
+    second = DEMO_SECOND.get(st.session_state.first_message)
+    if second:
+        box = "context_text" if st.session_state.step == "context" else "choice_text"
+        st.session_state[box] = second
+
+
+def send_context(details):
+    """The customer sends more details after a Yes from Model 1. Model 2 reads all messages."""
+    combined = f"{st.session_state.first_message} {details}"
+    st.session_state.combined_message = combined
+    add_message("user", details)
+    run_model2(combined)
+    st.rerun()
+
+
+def send_choice(details):
+    """The customer sends more details after a low No. One retry only: Model 1 runs again."""
+    combined = f"{st.session_state.first_message} {details}"
+    st.session_state.combined_message = combined
+    add_message("user", details)
+    result = run_model1(combined)
+    if result and result["intent"] == "Yes":
+        run_model2(combined)
+    elif result:
+        go_agent("retry_no")
+    st.rerun()
 
 
 # ----------------------------------------------------
@@ -439,9 +491,12 @@ with tab_analyse:
         st.subheader("💬 Customer messages")
         if step == "input":
             st.caption("Try one of these to get started.")
-            example_columns = st.columns(3)
-            for column, (label, text) in zip(example_columns, EXAMPLES.items()):
-                column.button(label, on_click=use_example, args=(text,), use_container_width=True)
+            # Three buttons per row, so the labels stay readable on a laptop screen.
+            items = list(EXAMPLES.items())
+            for row_start in range(0, len(items), 3):
+                example_columns = st.columns(3)
+                for column, (label, text) in zip(example_columns, items[row_start:row_start + 3]):
+                    column.button(label, on_click=use_example, args=(text,), use_container_width=True)
 
         with st.container(border=True):
             st.markdown('<div class="cl-eyebrow">Customer view</div>', unsafe_allow_html=True)
@@ -481,6 +536,7 @@ with tab_analyse:
                 with st.form("context_form", border=False):
                     details = st.text_area(
                         "Further customer messages",
+                        key="context_text",
                         help="Order number, condition of the item, or anything that explains the problem.",
                         placeholder="e.g. Order #12345. The zipper is completely broken and torn off.",
                         height=100,
@@ -491,16 +547,13 @@ with tab_analyse:
                     if not details.strip():
                         st.warning("Please enter some details.")
                     else:
-                        combined = f"{st.session_state.first_message} {details.strip()}"
-                        st.session_state.combined_message = combined
-                        add_message("user", details.strip())
-                        run_model2(combined)
-                        st.rerun()
+                        send_context(details.strip())
 
             elif step == "choice":
                 with st.form("choice_form", border=False):
                     details = st.text_area(
                         "Add more details",
+                        key="choice_text",
                         help="Order number, condition of the item, or anything that explains the problem.",
                         placeholder="e.g. The item arrived broken and I would like my money back.",
                         height=100,
@@ -517,16 +570,7 @@ with tab_analyse:
                     if not details.strip():
                         st.warning("Please enter some details, or talk to an agent.")
                     else:
-                        # One retry only: this step is left after this click, whatever the answer is.
-                        combined = f"{st.session_state.first_message} {details.strip()}"
-                        st.session_state.combined_message = combined
-                        add_message("user", details.strip())
-                        result = run_model1(combined)
-                        if result and result["intent"] == "Yes":
-                            run_model2(combined)
-                        elif result:
-                            go_agent("retry_no")
-                        st.rerun()
+                        send_choice(details.strip())
 
     with right:
         st.subheader("📊 Analysis results")
@@ -569,9 +613,12 @@ with tab_analyse:
         if st.session_state.request_ms:
             st.caption(f"Total request time: {st.session_state.request_ms} ms. Scores are rounded by the API.")
     # Demo helper: start again from the first screen. The test history is kept.
-    restart_column, _ = st.columns([1, 4])
+    restart_column, continue_column, _ = st.columns([1, 1, 3])
     with restart_column:
         st.button("↺ Restart demo", on_click=reset_flow, key="restart", use_container_width=True)
+    with continue_column:
+        if step in ("context", "choice") and DEMO_SECOND.get(st.session_state.first_message):
+            st.button("▶ Continue demo", on_click=fill_demo, key="continue_demo", use_container_width=True)
 
 with tab_history:
     st.subheader("🕘 Test history")
