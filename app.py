@@ -417,28 +417,21 @@ FOOTER_TEXT = "ClaimLens team project | Le Wagon Data Science bootcamp"
 
 # Demo prompts. Each one has a first message and a second message for the "Continue demo" button.
 # The numbers are the scores seen in testing. The app always shows what the API returns.
-# Delivery has no second message, so it has no Continue demo button.
-#   Billing 1:      M1 71%, then M2 96%  -> approved automatically
 #   Order issue:    M1 93%, then M2 57%  -> agent
-#   Damaged item:   M1 44%, then M1 51% and M2 47% -> agent
-#   Billing 2:      M1 44%, then M1 90% and M2 84% -> pre-approved
+#   Damaged item:   new wording, scores not checked yet
+#   Billing:        M1 44%, then M1 90% and M2 84% -> pre-approved
 DEMO_PROMPTS = [
-    ("💳 Billing 1",
-     "Hey, I have an issue",
-     "My bank statement says that I got charged twice for my order."),
     ("🛒 Order issue",
      "Hello! My item is wrong, I ordered a blue coat.",
      "I ordered a blue coat and received a green one."),
     ("📦 Damaged item",
-     "Good evening, my item was damage upon arrival.",
-     "I received my order last night and the item was completely destroyed when I opened the box. "
-     "I want to exchange it."),
-    ("💳 Billing 2",
+     "Good evening! When I got home my package was completely wet.",
+     "The delivery person left it out in the rain and it is ruined."),
+    ("💳 Billing",
      "I need to speak with customer service asap.",
      "You charged me 4 times the amount that i was supposed to pay"),
 ]
 EXAMPLES = {label: first for label, first, _ in DEMO_PROMPTS}
-EXAMPLES["🚚 Delivery"] = "My order has not arrived and the tracking has not moved for a week. I want my money back."
 DEMO_SECOND = {first: second for _, first, second in DEMO_PROMPTS}
 
 
@@ -516,7 +509,7 @@ with tab_analyse:
                     )
                     analyse_column, clear_column = st.columns([3, 2])
                     with analyse_column:
-                        submitted = st.form_submit_button("✦ Analyse", type="primary", use_container_width=True)
+                        submitted = st.form_submit_button("Send", type="primary", use_container_width=True)
                     with clear_column:
                         st.form_submit_button("↺ Clear", on_click=reset_flow, use_container_width=True)
 
