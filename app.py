@@ -105,7 +105,7 @@ STYLE = """
 [data-testid="stChatMessage"] { padding: .45rem .75rem; }
 [data-testid="stVerticalBlock"] { gap: .75rem; }
 
-.cl-banner { background:linear-gradient(100deg,#10303f 0%,#14505a 55%,#1a7566 100%); border-radius:26px;
+.cl-banner { background:#10303f; border-radius:26px;
              padding:1.2rem 2.4rem 1.3rem 2.4rem; margin-bottom:1rem; }
 .cl-banner-label { color:#a8e6cf; font-size:.85rem; letter-spacing:.28em; text-transform:uppercase; margin-bottom:.7rem; }
 .cl-banner-title { color:var(--green); font-size:3.9rem; font-weight:800; line-height:1.1; margin:0 0 .3rem 0; }
